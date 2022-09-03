@@ -1,8 +1,8 @@
-#include "tcp/hdr/TcpServer.h"
-#include "tcp/hdr/TcpClient.h"
+#include "tcp/include/TcpServer.h"
 
 #include <iostream>
-#include <mutex>
+
+using namespace stcp;
 
 //Parse ip to std::string
 std::string getHostStr(const TcpServer::Client& client) {
@@ -14,45 +14,43 @@ std::string getHostStr(const TcpServer::Client& client) {
             std::to_string( client.getPort ());
 }
 
-TcpServer server( 8080,
+TcpServer server(8081,
+{1, 1, 1}, // Keep alive{idle:1s, interval: 1s, pk_count: 1}
 
 [](DataBuffer data, TcpServer::Client& client){ // Data handler
-  std::cout << "Client "<<getHostStr(client)<<" send data [ " << data.size << " bytes ]: " << (char*)data.data_ptr << '\n';
-  client.sendData("Hello, client!", sizeof("Hello, client!"));
+  std::cout << "Client "<< getHostStr(client) <<" send data [ " << data.size() << " bytes ]: " << (char*)data.data() << '\n';
+  client.sendData("Hello, client!\0", sizeof("Hello, client!\0"));
 },
 
 [](TcpServer::Client& client) { // Connect handler
   std::cout << "Client " << getHostStr(client) << " connected\n";
 },
 
-
 [](TcpServer::Client& client) { // Disconnect handler
   std::cout << "Client " << getHostStr(client) << " disconnected\n";
 },
 
-{1, 1, 1} // Keep alive{idle:1s, interval: 1s, pk_count: 1}
+std::thread::hardware_concurrency() // Thread pool size
 );
-
-void testServer() {
-  //Start server
-  if(server.start() == TcpServer::status::up) {
-      std::cout<<"Server listen on port:"<<server.getPort()<<std::endl;
-      server.joinLoop();
-  } else {
-      std::cout<<"Server start error! Error code:"<< int(server.getStatus()) <<std::endl;
-  }
-}
-
 
 
 
 int main() {
   using namespace std::chrono_literals;
   try {
-  testServer();
+    //Start server
+    if(server.start() == TcpServer::status::up) {
+      std::cout<<"Server listen on port: " << server.getPort() << std::endl
+               <<"Server handling thread pool size: " << server.getThreadPool().getThreadCount() << std::endl;
+      server.joinLoop();
+      return EXIT_SUCCESS;
+    } else {
+      std::cout<<"Server start error! Error code:"<< int(server.getStatus()) <<std::endl;
+      return EXIT_FAILURE;
+    }
 
-  std::this_thread::sleep_for(30s);
   } catch(std::exception& except) {
     std::cerr << except.what();
+    return EXIT_FAILURE;
   }
 }

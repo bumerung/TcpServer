@@ -1,10 +1,10 @@
-#include "tcp/hdr/TcpClient.h"
+#include "tcp/include/TcpClient.h"
 
 #include <iostream>
 #include <stdlib.h>
 #include <thread>
 
-using namespace std;
+using namespace stcp;
 
 std::string getHostStr(uint32_t ip, uint16_t port) {
     return std::string() + std::to_string(int(reinterpret_cast<char*>(&ip)[0])) + '.' +
@@ -14,24 +14,40 @@ std::string getHostStr(uint32_t ip, uint16_t port) {
             std::to_string( port );
 }
 
-
-void client() {
+void runClient(TcpClient& client) {
   using namespace std::chrono_literals;
-  TcpClient client;
-  client.connectTo(LOCALHOST_IP, 8080);
-  client.sendData("Hello, server!", sizeof("Hello, server!"));
-  DataBuffer data = client.loadData();
-  std::cout << "Client[ " << data.size << " bytes ]: " << (const char*)data.data_ptr << '\n';
-  std::this_thread::sleep_for(5s);
-  client.disconnect();
-  std::clog << "Socket closed!\n";
+  if(client.connectTo(LOCALHOST_IP, 8081) == SocketStatus::connected) {
+      std::clog << "Client connected\n";
+
+        client.setHandler([&client](DataBuffer data) {
+          std::clog << "Recived " << data.size() << " bytes: " << (char*)data.data() << '\n';
+          std::this_thread::sleep_for(1s);
+          client.sendData("Hello, server\0", sizeof ("Hello, server\0"));
+        });
+        client.sendData("Hello, server\0", sizeof ("Hello, server\0"));
+  } else {
+    std::cerr << "Client isn't connected\n";
+    std::exit(EXIT_FAILURE);
+  }
 }
 
-int main() {
-  std::thread th1(client);
-  std::thread th2(client);
-  std::thread th3(client);
-  th1.join();
-  th2.join();
-  th3.join();
+int main(int, char**) {
+  ThreadPool thread_pool;
+
+  TcpClient first_client(&thread_pool);
+  TcpClient second_client(&thread_pool);
+  TcpClient thrird_client(&thread_pool);
+  TcpClient fourth_client(&thread_pool);
+
+  runClient(first_client);
+  runClient(second_client);
+  runClient(thrird_client);
+  runClient(fourth_client);
+
+  first_client.joinHandler();
+  second_client.joinHandler();
+  thrird_client.joinHandler();
+  fourth_client.joinHandler();
+
+  return EXIT_SUCCESS;
 }
